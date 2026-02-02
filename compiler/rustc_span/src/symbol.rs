@@ -2339,6 +2339,7 @@ symbols! {
         type_changing_struct_update,
         type_const,
         type_id,
+        type_id_vtable,
         type_id_eq,
         type_info,
         type_ir,

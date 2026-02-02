@@ -86,7 +86,10 @@
 
 #![stable(feature = "rust1", since = "1.0.0")]
 
-use crate::{fmt, hash, intrinsics, ptr};
+use crate::intrinsics::{self, type_id_vtable};
+use crate::mem::transmute;
+use crate::mem::type_info::{TraitImpl, TypeKind};
+use crate::{fmt, hash, ptr};
 
 ///////////////////////////////////////////////////////////////////////////////
 // Any trait
@@ -786,6 +789,40 @@ impl TypeId {
     #[rustc_const_stable(feature = "const_type_id", since = "1.91.0")]
     pub const fn of<T: ?Sized + 'static>() -> TypeId {
         const { intrinsics::type_id::<T>() }
+    }
+
+    /// Checks if the type has the trait.
+    /// It can only be called at compile time.
+    #[unstable(feature = "type_info", issue = "146922")]
+    #[rustc_const_unstable(feature = "type_info", issue = "146922")]
+    pub const fn trait_info_of<
+        T: ptr::Pointee<Metadata = ptr::DynMetadata<T>> + ?Sized + 'static,
+    >(
+        self,
+    ) -> Option<TraitImpl<T>> {
+        if let Some(vtable) = crate::intrinsics::type_id_vtable(self, const { TypeId::of::<T>() }) {
+            Some(TraitImpl { vtable: unsafe { transmute(vtable) } })
+        } else {
+            None
+        }
+    }
+
+    /// Checks if the type has the trait represented by the `TypeId`.
+    /// Returns `None` if the `trait_represented_by_type_id` is not a trait represented by type id.
+    /// It can only be called at compile time.
+    #[unstable(feature = "type_info", issue = "146922")]
+    #[rustc_const_unstable(feature = "type_info", issue = "146922")]
+    pub const fn trait_info_of_trait_type_id(
+        self,
+        trait_represented_by_type_id: TypeId,
+    ) -> Option<TraitImpl<*const ()>> {
+        if matches!(trait_represented_by_type_id.info().kind, TypeKind::DynTrait(_))
+            && let Some(vtable) = type_id_vtable(self, trait_represented_by_type_id)
+        {
+            Some(TraitImpl { vtable })
+        } else {
+            None
+        }
     }
 
     fn as_u128(self) -> u128 {
