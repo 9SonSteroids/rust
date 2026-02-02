@@ -791,8 +791,20 @@ impl TypeId {
         const { intrinsics::type_id::<T>() }
     }
 
-    /// Checks if the type has the trait.
+    /// Checks if the [TypeId] implements the trait. If it does it returns [TraitImpl] which can be used to build a fat pointer.
     /// It can only be called at compile time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::any::{TypeId};
+    ///
+    /// pub trait Blah {}
+    /// impl Blah for u8 {}
+    ///
+    /// assert_eq!(const { TypeId::of::<u8>().trait_info_of::<dyn Blah>() }.is_some());
+    /// assert_eq!(const { TypeId::of::<u16>().trait_info_of::<dyn Blah>() }.is_none());
+    /// ```
     #[unstable(feature = "type_info", issue = "146922")]
     #[rustc_const_unstable(feature = "type_info", issue = "146922")]
     pub const fn trait_info_of<
@@ -801,15 +813,28 @@ impl TypeId {
         self,
     ) -> Option<TraitImpl<T>> {
         if let Some(vtable) = crate::intrinsics::type_id_vtable(self, const { TypeId::of::<T>() }) {
+            // SAFETY: Vtable was aquired for T, therefore it is DynMetadata<T>, the intrinsic doesn't know it because it
+            // designed to work even with 2 TypeIds.
             Some(TraitImpl { vtable: unsafe { transmute(vtable) } })
         } else {
             None
         }
     }
 
-    /// Checks if the type has the trait represented by the `TypeId`.
-    /// Returns `None` if the `trait_represented_by_type_id` is not a trait represented by type id.
+    /// Checks if the [TypeId] implements the trait of `trait_represented_by_type_id`. If it does it returns [TraitImpl] which can be used to build a fat pointer.
     /// It can only be called at compile time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::any::{TypeId};
+    ///
+    /// pub trait Blah {}
+    /// impl Blah for u8 {}
+    ///
+    /// assert_eq!(const { TypeId::of::<u8>().trait_info_of_trait_type_id(TypeId::of::<dyn Blah>()) }.is_some());
+    /// assert_eq!(const { TypeId::of::<u16>().trait_info_of_trait_type_id(TypeId::of::<dyn Blah>()) }.is_none());
+    /// ```
     #[unstable(feature = "type_info", issue = "146922")]
     #[rustc_const_unstable(feature = "type_info", issue = "146922")]
     pub const fn trait_info_of_trait_type_id(

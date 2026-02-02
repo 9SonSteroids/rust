@@ -335,7 +335,9 @@ fn test_implements_trait() {
         }.get_vtable(),
         unsafe {
             crate::mem::transmute::<_, DynMetadata<*const ()>>(
-                const {TypeId::of::<Garlic>().trait_info_of::<dyn Blah>()}.unwrap().get_vtable(),
+                const {
+                    TypeId::of::<Garlic>().trait_info_of::<dyn Blah>()
+                }.unwrap().get_vtable(),
             )
         }
     );

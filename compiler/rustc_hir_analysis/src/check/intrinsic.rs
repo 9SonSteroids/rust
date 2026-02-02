@@ -212,8 +212,8 @@ fn intrinsic_operation_unsafety(tcx: TyCtxt<'_>, intrinsic_id: LocalDefId) -> hi
         | sym::truncf64
         | sym::truncf128
         | sym::type_id
-        | sym::type_id_vtable
         | sym::type_id_eq
+        | sym::type_id_vtable
         | sym::type_name
         | sym::type_of
         | sym::ub_checks
