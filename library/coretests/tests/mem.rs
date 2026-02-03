@@ -1,3 +1,4 @@
+mod trait_info_of;
 mod type_info;
 
 use core::mem::*;

@@ -2861,7 +2861,9 @@ pub const fn type_id_vtable(
     _id: crate::any::TypeId,
     _trait: crate::any::TypeId,
 ) -> Option<ptr::DynMetadata<*const ()>> {
-    panic!("`TypeId::implements_trait` can only be called at compile-time")
+    panic!(
+        "`TypeId::trait_info_of` and `trait_info_of_trait_type_id` can only be called at compile-time"
+    )
 }
 
 /// Compute the type information of a concrete type.

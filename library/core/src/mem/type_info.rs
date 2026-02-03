@@ -18,7 +18,7 @@ pub struct Type {
     pub size: Option<usize>,
 }
 
-/// Info of a trait implementation, you can retreive the vtable with [Self::get_vtable]
+/// Info of a trait implementation, you can retrieve the vtable with [Self::get_vtable]
 #[derive(Debug, PartialEq, Eq)]
 pub struct TraitImpl<T: PointeeSized> {
     pub(crate) vtable: DynMetadata<T>,

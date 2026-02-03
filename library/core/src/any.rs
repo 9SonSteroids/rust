@@ -792,18 +792,19 @@ impl TypeId {
     }
 
     /// Checks if the [TypeId] implements the trait. If it does it returns [TraitImpl] which can be used to build a fat pointer.
-    /// It can only be called at compile time.
+    /// It can only be called at compile time. `self` must be the [TypeId] of a sized type or None will be returned.
     ///
     /// # Examples
     ///
     /// ```
+    /// #![feature(type_info)]
     /// use std::any::{TypeId};
     ///
     /// pub trait Blah {}
     /// impl Blah for u8 {}
     ///
-    /// assert_eq!(const { TypeId::of::<u8>().trait_info_of::<dyn Blah>() }.is_some());
-    /// assert_eq!(const { TypeId::of::<u16>().trait_info_of::<dyn Blah>() }.is_none());
+    /// assert!(const { TypeId::of::<u8>().trait_info_of::<dyn Blah>() }.is_some());
+    /// assert!(const { TypeId::of::<u16>().trait_info_of::<dyn Blah>() }.is_none());
     /// ```
     #[unstable(feature = "type_info", issue = "146922")]
     #[rustc_const_unstable(feature = "type_info", issue = "146922")]
@@ -812,28 +813,25 @@ impl TypeId {
     >(
         self,
     ) -> Option<TraitImpl<T>> {
-        if let Some(vtable) = crate::intrinsics::type_id_vtable(self, const { TypeId::of::<T>() }) {
-            // SAFETY: Vtable was aquired for T, therefore it is DynMetadata<T>, the intrinsic doesn't know it because it
-            // designed to work even with 2 TypeIds.
-            Some(TraitImpl { vtable: unsafe { transmute(vtable) } })
-        } else {
-            None
-        }
+        // SAFETY: The vtable was obtained for `T`, so it is guaranteed to be `DynMetadata<T>`.
+        // The intrinsic can't infer this because it is designed to work with arbitrary TypeIds.
+        unsafe { transmute(self.trait_info_of_trait_type_id(const { TypeId::of::<T>() })) }
     }
 
     /// Checks if the [TypeId] implements the trait of `trait_represented_by_type_id`. If it does it returns [TraitImpl] which can be used to build a fat pointer.
-    /// It can only be called at compile time.
+    /// It can only be called at compile time. `self` must be the [TypeId] of a sized type or None will be returned.
     ///
     /// # Examples
     ///
     /// ```
+    /// #![feature(type_info)]
     /// use std::any::{TypeId};
     ///
     /// pub trait Blah {}
     /// impl Blah for u8 {}
     ///
-    /// assert_eq!(const { TypeId::of::<u8>().trait_info_of_trait_type_id(TypeId::of::<dyn Blah>()) }.is_some());
-    /// assert_eq!(const { TypeId::of::<u16>().trait_info_of_trait_type_id(TypeId::of::<dyn Blah>()) }.is_none());
+    /// assert!(const { TypeId::of::<u8>().trait_info_of_trait_type_id(TypeId::of::<dyn Blah>()) }.is_some());
+    /// assert!(const { TypeId::of::<u16>().trait_info_of_trait_type_id(TypeId::of::<dyn Blah>()) }.is_none());
     /// ```
     #[unstable(feature = "type_info", issue = "146922")]
     #[rustc_const_unstable(feature = "type_info", issue = "146922")]
@@ -841,6 +839,10 @@ impl TypeId {
         self,
         trait_represented_by_type_id: TypeId,
     ) -> Option<TraitImpl<*const ()>> {
+        if self.info().size.is_none() {
+            return None;
+        }
+
         if matches!(trait_represented_by_type_id.info().kind, TypeKind::DynTrait(_))
             && let Some(vtable) = type_id_vtable(self, trait_represented_by_type_id)
         {
