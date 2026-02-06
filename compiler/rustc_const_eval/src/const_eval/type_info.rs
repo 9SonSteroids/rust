@@ -1,9 +1,9 @@
-use rustc_abi::FieldIdx;
+use rustc_abi::{FieldIdx, VariantIdx};
 use rustc_ast::Mutability;
 use rustc_hir::LangItem;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::TyAndLayout;
-use rustc_middle::ty::{self, Const, ScalarInt, Ty};
+use rustc_middle::ty::{self, Const, FnHeader, ScalarInt, Ty};
 use rustc_span::{Symbol, sym};
 
 use crate::const_eval::CompileTimeMachine;
@@ -13,11 +13,59 @@ use crate::interpret::{
 };
 
 impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
+    // FIXME: Merge with #151142
+    fn downcast(
+        &self,
+        place: &(impl Writeable<'tcx, CtfeProvenance> + 'tcx),
+        name: Symbol,
+    ) -> InterpResult<'tcx, (VariantIdx, impl Writeable<'tcx, CtfeProvenance> + 'tcx)> {
+        let variants = place.layout().ty.ty_adt_def().unwrap().variants();
+        let variant_id = variants
+            .iter_enumerated()
+            .find(|(_idx, var)| var.name == name)
+            .unwrap_or_else(|| panic!("got {name} but expected one of {variants:#?}"))
+            .0;
+
+        interp_ok((variant_id, self.project_downcast(place, variant_id)?))
+    }
+
+    // FIXME: Merge with #151142
+    // A general method to write an array to a static slice place.
+    fn allocate_fill_and_write_slice_ptr(
+        &mut self,
+        slice_place: impl Writeable<'tcx, CtfeProvenance>,
+        len: u64,
+        writer: impl Fn(&mut Self, /* index */ u64, MPlaceTy<'tcx>) -> InterpResult<'tcx>,
+    ) -> InterpResult<'tcx> {
+        // Array element type
+        let field_ty = slice_place
+            .layout()
+            .ty
+            .builtin_deref(false)
+            .unwrap()
+            .sequence_element_type(self.tcx.tcx);
+
+        // Allocate an array
+        let array_layout = self.layout_of(Ty::new_array(self.tcx.tcx, field_ty, len))?;
+        let array_place = self.allocate(array_layout, MemoryKind::Stack)?;
+
+        // Fill the array fields
+        let mut field_places = self.project_array_fields(&array_place)?;
+        while let Some((i, place)) = field_places.next(self)? {
+            writer(self, i, place)?;
+        }
+
+        // Write the slice pointing to the array
+        let array_place = array_place.map_provenance(CtfeProvenance::as_immutable);
+        let ptr = Immediate::new_slice(array_place.ptr(), len, self);
+        self.write_immediate(ptr, &slice_place)
+    }
+
     /// Writes a `core::mem::type_info::TypeInfo` for a given type, `ty` to the given place.
     pub(crate) fn write_type_info(
         &mut self,
         ty: Ty<'tcx>,
-        dest: &impl Writeable<'tcx, CtfeProvenance>,
+        dest: &(impl Writeable<'tcx, CtfeProvenance> + 'tcx),
     ) -> InterpResult<'tcx> {
         let ty_struct = self.tcx.require_lang_item(LangItem::Type, self.tcx.span);
         let ty_struct = self.tcx.type_of(ty_struct).no_bound_vars().unwrap();
@@ -135,11 +183,24 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
                             self.write_dyn_trait_type_info(dyn_place, *predicates, *region)?;
                             variant
                         }
+                        ty::FnPtr(binder, FnHeader { safety, c_variadic, abi }) => {
+                            let (variant, variant_place) = downcast(sym::FnPtr)?;
+                            let fn_ptr_place =
+                                self.project_field(&variant_place, FieldIdx::ZERO)?;
+                            self.write_fn_ptr_type_info(
+                                fn_ptr_place,
+                                binder.skip_binder().output(),
+                                safety.is_unsafe(),
+                                *c_variadic,
+                                (!abi.is_rustic_abi()).then_some(abi.as_str()),
+                                binder.skip_binder().inputs(),
+                            )?;
+                            variant
+                        }
                         ty::Adt(_, _)
                         | ty::Foreign(_)
                         | ty::Pat(_, _)
                         | ty::FnDef(..)
-                        | ty::FnPtr(..)
                         | ty::UnsafeBinder(..)
                         | ty::Closure(..)
                         | ty::CoroutineClosure(..)
@@ -351,6 +412,62 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
                 other => span_bug!(self.tcx.def_span(field.did), "unimplemented field {other}"),
             }
         }
+        interp_ok(())
+    }
+
+    pub(crate) fn write_fn_ptr_type_info(
+        &mut self,
+        place: impl Writeable<'tcx, CtfeProvenance> + 'tcx,
+        output: Ty<'tcx>,
+        unsafety: bool,
+        variadic: bool,
+        abi: Option<&'static str>,
+        inputs: &[Ty<'tcx>],
+    ) -> InterpResult<'tcx> {
+        for (field_idx, field) in
+            place.layout().ty.ty_adt_def().unwrap().non_enum_variant().fields.iter_enumerated()
+        {
+            let field_place = self.project_field(&place, field_idx)?;
+
+            match field.name {
+                sym::unsafety => {
+                    self.write_scalar(Scalar::from_bool(unsafety), &field_place)?;
+                }
+                sym::abi => match abi {
+                    Some("C") => {
+                        let (rust_variant, _rust_place) = self.downcast(&field_place, sym::C)?;
+                        self.write_discriminant(rust_variant, &field_place)?;
+                    }
+                    Some(abi) => {
+                        let (variant, variant_place) = self.downcast(&field_place, sym::Named)?;
+                        let str_place = self.allocate_str_dedup(abi)?;
+                        let str_ref = self.mplace_to_ref(&str_place)?;
+                        let payload = self.project_field(&variant_place, FieldIdx::ZERO)?;
+                        self.write_immediate(*str_ref, &payload)?;
+                        self.write_discriminant(variant, &field_place)?;
+                    }
+                    None => {
+                        let (rust_variant, _rust_place) = self.downcast(&field_place, sym::Rust)?;
+                        self.write_discriminant(rust_variant, &field_place)?;
+                    }
+                },
+                sym::inputs => {
+                    self.allocate_fill_and_write_slice_ptr(
+                        field_place,
+                        inputs.len() as _,
+                        |this, i, place| this.write_type_id(inputs[i as usize], &place),
+                    )?;
+                }
+                sym::output => {
+                    self.write_type_id(output, &field_place)?;
+                }
+                sym::variadic => {
+                    self.write_scalar(Scalar::from_bool(variadic), &field_place)?;
+                }
+                other => span_bug!(self.tcx.def_span(field.did), "unimplemented field {other}"),
+            }
+        }
+
         interp_ok(())
     }
 

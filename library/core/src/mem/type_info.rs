@@ -63,6 +63,8 @@ pub enum TypeKind {
     Reference(Reference),
     /// Pointers.
     Pointer(Pointer),
+    /// Function pointers.
+    FnPtr(FnPtr),
     /// FIXME(#146922): add all the common types
     Other,
 }
@@ -201,4 +203,40 @@ pub struct Pointer {
     pub pointee: TypeId,
     /// Whether this pointer is mutable or not.
     pub mutable: bool,
+}
+
+#[derive(Debug)]
+#[unstable(feature = "type_info", issue = "146922")]
+/// Function pointer, e.g. fn(u8),
+pub struct FnPtr {
+    /// Unsafety, true is unsafe
+    pub unsafety: bool,
+
+    /// Abi, e.g. extern "C"
+    pub abi: Abi,
+
+    /// Function inputs
+    pub inputs: &'static [TypeId],
+
+    /// Function return type, default is TypeId::of::<()>
+    pub output: TypeId,
+
+    /// Vardiadic function, e.g. extern "C" fn add(n: usize, mut args: ...);
+    pub variadic: bool,
+}
+
+#[derive(Debug, Default)]
+#[non_exhaustive]
+#[unstable(feature = "type_info", issue = "146922")]
+/// Abi of [FnPtr]
+pub enum Abi {
+    /// Named abi, e.g. extern "custom", "C" etc.
+    Named(&'static str),
+
+    /// Default
+    #[default]
+    Rust,
+
+    /// C-calling convention
+    C,
 }
