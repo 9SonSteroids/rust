@@ -16,6 +16,7 @@
 #![feature(clamp_magnitude)]
 #![feature(clone_to_uninit)]
 #![feature(const_array)]
+#![feature(adt_const_params)]
 #![feature(const_bool)]
 #![feature(const_cell_traits)]
 #![feature(const_clone)]

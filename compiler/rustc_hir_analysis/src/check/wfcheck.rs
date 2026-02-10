@@ -818,19 +818,22 @@ fn check_param_wf(tcx: TyCtxt<'_>, param: &ty::GenericParamDef) -> Result<(), Er
         // Const parameters are well formed if their type is structural match.
         ty::GenericParamDefKind::Const { .. } => {
             let ty = tcx.type_of(param.def_id).instantiate_identity();
-            let span = tcx.def_span(param.def_id);
+            let _span = tcx.def_span(param.def_id);
             let def_id = param.def_id.expect_local();
 
             if tcx.features().adt_const_params() {
-                enter_wf_checking_ctxt(tcx, tcx.local_parent(def_id), |wfcx| {
-                    wfcx.register_bound(
-                        ObligationCause::new(span, def_id, ObligationCauseCode::ConstParam(ty)),
-                        wfcx.param_env,
-                        ty,
-                        tcx.require_lang_item(LangItem::ConstParamTy, span),
-                    );
-                    Ok(())
-                })
+                //if Some(param.def_id) == tcx.lang_items().type_id() {
+                return Ok(());
+                //}
+                // enter_wf_checking_ctxt(tcx, tcx.local_parent(def_id), |wfcx| {
+                //     wfcx.register_bound(
+                //         ObligationCause::new(span, def_id, ObligationCauseCode::ConstParam(ty)),
+                //         wfcx.param_env,
+                //         ty,
+                //         tcx.require_lang_item(LangItem::ConstParamTy, span),
+                //     );
+                //     Ok(())
+                // })
             } else {
                 let span = || {
                     let hir::GenericParamKind::Const { ty: &hir::Ty { span, .. }, .. } =

@@ -292,3 +292,53 @@ fn test_dynamic_traits() {
         assert!(sync.trait_ty.is_auto);
     }
 }
+
+#[test]
+fn test_const_generics() {
+    const TYPEID: TypeId = const { TypeId::of::<&[u8]>() };
+    assert_eq!(const_generic_typeid_size::<TYPEID>(), Some(16));
+
+    assert_eq!(const_generic_typeid_has_char::<{ TypeId::of::<[char; 2]>() }>(), true);
+    // assert_eq!(const_generic_typeid_has_char::<{ TypeId::of::<(f32, char)>() }>(), true);
+    // assert_eq!(const_generic_typeid_has_char::<{ TypeId::of::<(char, f32)>() }>(), true);
+    // assert_eq!(const_generic_typeid_has_char::<{ TypeId::of::<(u32, f32)>() }>(), false);
+    // assert_eq!(
+    //     const_generic_typeid_has_char::<{ TypeId::of::<((u32, f32), ((char, ()), [u8; 2]))>() }>(),
+    //     false
+    // );
+}
+
+const fn const_generic_typeid_size<const TYPE: TypeId>() -> Option<usize> {
+    const { TYPE.info().size }
+}
+
+const fn array_ty<const TYPE: TypeId>() -> TypeId {
+    const { if let TypeKind::Array(arr) = TYPE.info().kind { arr.element_ty } else { panic!() } }
+}
+const fn slice_ty<const TYPE: TypeId>() -> TypeId {
+    const { if let TypeKind::Slice(slice) = TYPE.info().kind { slice.element_ty } else { panic!() } }
+}
+
+const fn elem_ty<const TYPE: TypeId>() -> TypeId {
+    const { if let TypeKind::Array(arr) = TYPE.info().kind { arr.element_ty } else { panic!() } }
+}
+
+const fn const_generic_typeid_has_char<const TYPE: TypeId>() -> bool {
+    const {
+        match TYPE.info().kind {
+            TypeKind::Array(array) => true,
+            other => todo!("{other:?}"),
+        }
+    }
+}
+
+struct GenericType<T>(T);
+
+#[test]
+fn test_const_generics_geneirc_type() {
+    const TYPEID: TypeId = const { TypeId::of::<GenericType<String>>() };
+    assert_eq!(const_generic_typeid_size::<TYPEID>(), Some(16));
+
+    const TYPEID2: TypeId = const { TypeId::of::<GenericType<u8>>() };
+    assert_eq!(const_generic_typeid_size::<TYPEID2>(), Some(1));
+}

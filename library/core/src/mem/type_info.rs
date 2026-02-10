@@ -5,7 +5,7 @@ use crate::any::TypeId;
 use crate::intrinsics::type_of;
 
 /// Compile-time type information.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[lang = "type_info"]
 #[unstable(feature = "type_info", issue = "146922")]
@@ -37,7 +37,7 @@ impl Type {
 }
 
 /// Compile-time type information.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub enum TypeKind {
@@ -68,7 +68,7 @@ pub enum TypeKind {
 }
 
 /// Compile-time type information about tuples.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Tuple {
@@ -77,7 +77,7 @@ pub struct Tuple {
 }
 
 /// Compile-time type information about fields of tuples, structs and enum variants.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Field {
@@ -88,7 +88,7 @@ pub struct Field {
 }
 
 /// Compile-time type information about arrays.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Array {
@@ -99,7 +99,7 @@ pub struct Array {
 }
 
 /// Compile-time type information about slices.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Slice {
@@ -109,7 +109,7 @@ pub struct Slice {
 
 /// Compile-time type information about dynamic traits.
 /// FIXME(#146922): Add super traits and generics
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct DynTrait {
@@ -118,7 +118,7 @@ pub struct DynTrait {
 }
 
 /// Compile-time type information about a dynamic trait predicate.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct DynTraitPredicate {
@@ -127,7 +127,7 @@ pub struct DynTraitPredicate {
 }
 
 /// Compile-time type information about a trait.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Trait {
@@ -138,7 +138,7 @@ pub struct Trait {
 }
 
 /// Compile-time type information about `bool`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Bool {
@@ -146,7 +146,7 @@ pub struct Bool {
 }
 
 /// Compile-time type information about `char`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Char {
@@ -154,7 +154,7 @@ pub struct Char {
 }
 
 /// Compile-time type information about signed and unsigned integer types.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Int {
@@ -165,7 +165,7 @@ pub struct Int {
 }
 
 /// Compile-time type information about floating-point types.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Float {
@@ -174,7 +174,7 @@ pub struct Float {
 }
 
 /// Compile-time type information about string slice types.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Str {
@@ -182,7 +182,7 @@ pub struct Str {
 }
 
 /// Compile-time type information about references.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Reference {
@@ -193,7 +193,7 @@ pub struct Reference {
 }
 
 /// Compile-time type information about pointers.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Pointer {

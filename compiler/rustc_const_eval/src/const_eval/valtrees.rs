@@ -1,9 +1,10 @@
-use rustc_abi::{BackendRepr, FieldIdx, VariantIdx};
+use rustc_abi::{BackendRepr, FieldIdx, Size, VariantIdx};
 use rustc_data_structures::stack::ensure_sufficient_stack;
+use rustc_hir::def_id::DefId;
 use rustc_middle::mir::interpret::{EvalToValTreeResult, GlobalId, ValTreeCreationError};
 use rustc_middle::traits::ObligationCause;
 use rustc_middle::ty::layout::{LayoutCx, TyAndLayout};
-use rustc_middle::ty::{self, Ty, TyCtxt};
+use rustc_middle::ty::{self, ScalarInt, Ty, TyCtxt};
 use rustc_middle::{bug, mir};
 use rustc_span::DUMMY_SP;
 use tracing::{debug, instrument, trace};
@@ -19,7 +20,7 @@ use crate::interpret::{
 
 #[instrument(skip(ecx), level = "debug")]
 fn branches<'tcx>(
-    ecx: &CompileTimeInterpCx<'tcx>,
+    ecx: &mut CompileTimeInterpCx<'tcx>,
     place: &MPlaceTy<'tcx>,
     field_count: usize,
     variant: Option<VariantIdx>,
@@ -59,7 +60,7 @@ fn branches<'tcx>(
 
 #[instrument(skip(ecx), level = "debug")]
 fn slice_branches<'tcx>(
-    ecx: &CompileTimeInterpCx<'tcx>,
+    ecx: &mut CompileTimeInterpCx<'tcx>,
     place: &MPlaceTy<'tcx>,
     num_nodes: &mut usize,
 ) -> EvalToValTreeResult<'tcx> {
@@ -77,7 +78,7 @@ fn slice_branches<'tcx>(
 
 #[instrument(skip(ecx), level = "debug")]
 fn const_to_valtree_inner<'tcx>(
-    ecx: &CompileTimeInterpCx<'tcx>,
+    ecx: &mut CompileTimeInterpCx<'tcx>,
     place: &MPlaceTy<'tcx>,
     num_nodes: &mut usize,
 ) -> EvalToValTreeResult<'tcx> {
@@ -162,8 +163,24 @@ fn const_to_valtree_inner<'tcx>(
                 bug!("uninhabited types should have errored and never gotten converted to valtree")
             }
 
-            let variant = ecx.read_discriminant(place).report_err()?;
-            branches(ecx, place, def.variant(variant).fields.len(), def.is_enum().then_some(variant), num_nodes)
+            if ecx.tcx.features().adt_const_params() && Some(def.did()) == ecx.tcx.lang_items().type_id() {
+                let def_id = def.did();
+                // let args_valtrees: Vec<_> = args.iter()
+                //     .map(|arg| ty_to_valtree(ecx, arg.expect_ty()))
+                //     .collect();
+                return Ok(ty::ValTree::from_branches(*ecx.tcx, vec![
+                    ty::Const::new_value(*ecx.tcx, ty::ValTree::from_scalar_int(*ecx.tcx, ScalarInt::try_from_uint(def_id.index.as_u32(), Size::from_bits(32)).unwrap()), ecx.tcx.types.u32),
+                    ty::Const::new_value(*ecx.tcx, ty::ValTree::from_scalar_int(*ecx.tcx, ScalarInt::try_from_uint(def_id.krate.as_u32(), Size::from_bits(32)).unwrap()), ecx.tcx.types.u32),
+                    // todo: generics
+                ]));
+
+            }
+            if ecx.tcx.features().adt_const_params() && Some(def.did()) == tcx.lang_items().type_struct() {
+                todo!()
+            } else {
+                let variant = ecx.read_discriminant(place).report_err()?;
+                branches(ecx, place, def.variant(variant).fields.len(), def.is_enum().then_some(variant), num_nodes)
+            }
         }
 
         ty::Never
@@ -242,7 +259,7 @@ pub(crate) fn eval_to_valtree<'tcx>(
     let const_alloc = tcx.eval_to_allocation_raw(typing_env.as_query_input(cid))?;
 
     // FIXME Need to provide a span to `eval_to_valtree`
-    let ecx = mk_eval_cx_to_read_const_val(
+    let mut ecx = mk_eval_cx_to_read_const_val(
         tcx,
         DUMMY_SP,
         typing_env,
@@ -254,7 +271,7 @@ pub(crate) fn eval_to_valtree<'tcx>(
     debug!(?place);
 
     let mut num_nodes = 0;
-    const_to_valtree_inner(&ecx, &place, &mut num_nodes)
+    const_to_valtree_inner(&mut ecx, &place, &mut num_nodes)
 }
 
 /// Converts a `ValTree` to a `ConstValue`, which is needed after mir
@@ -396,6 +413,22 @@ fn valtree_into_mplace<'tcx>(
             ecx.write_immediate(imm, place).unwrap();
         }
         ty::Adt(_, _) | ty::Tuple(_) | ty::Array(_, _) | ty::Str | ty::Slice(_) => {
+            if let ty::Adt(def, _) = ty.kind()
+                && ecx.tcx.features().adt_const_params()
+                && Some(def.did()) == ecx.tcx.lang_items().type_id()
+            {
+                let branches = valtree.to_branch();
+                let index = branches[0].to_leaf().to_u32();
+                let krate = branches[1].to_leaf().to_u32();
+                // TODO: let args = branches[1..].iter().map(|v| valtree_to_ty(tcx, v.to_value().valtree)).collect();
+                let ty = ecx
+                    .tcx
+                    .type_of(DefId { index: index.into(), krate: krate.into() })
+                    .instantiate(*ecx.tcx, &[]); // TODO: Args
+                ecx.write_type_id(ty, place).unwrap();
+                return;
+            }
+
             let branches = valtree.to_branch();
 
             // Need to downcast place for enums
